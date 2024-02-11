@@ -33,8 +33,8 @@ impl fmt::Debug for Entry {
 
 #[derive(Serialize, Deserialize)]
 pub struct List {
-    entries: Vec<Entry>,
-    id_tracker: i32
+    pub entries: Vec<Entry>,
+    pub id_tracker: i32
 }
 
 impl List {
@@ -140,4 +140,47 @@ pub fn list_tasks(list: &List) {
     if dones.len() > 0 { 
         for el in dones {print!("{:?}", el) }
     }
+}
+
+pub fn close_task(mut list: List, id: i32) -> Result<List, Error> {
+    for i in 0..list.entries.len() {
+        if list.entries[i].id == id && list.entries[i].status != Status::Done {
+            list.entries[i].status = Status::Done;
+            return Ok(list)
+        }
+    }
+    Err(Error::new(ErrorKind::InvalidInput, "Open task with provided id not found"))
+}
+
+pub fn show_help() {
+    let help_string = "
+    Usage:
+    add [task_name]
+        Adds new task named [task_name] under TODO.
+    
+    list
+        List all overdue, todo and closed tasks, in that order.
+    
+    close [task_id]
+        Close task with provided [task_id], moves it from TODO to done.
+    
+    remove [task_id]
+        Removes task from list. Other task ids are not affected.
+
+    quit
+        Exit TODO cli.
+    ";
+    println!("{}", help_string);
+}
+
+#[test]
+fn test_update_task() {
+    let mut list = List{entries: Vec::new(), id_tracker: 0};
+    list = add_task(list, "Sample task");
+
+    let to_close: i32 = 0;
+
+    assert_eq!(&list.entries[to_close], Status::Todo);
+    list = update_task(list, to_close).unwrap();
+    assert_eq!(list.entries[to_close], Status::Done);
 }

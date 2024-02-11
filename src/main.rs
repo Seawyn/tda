@@ -22,9 +22,14 @@ fn main() {
             
                 all_tasks = utils::add_task(all_tasks, task_name);
             },
-            "help" => println!("TODO: Show guide"),
+            "help" => utils::show_help(),
             "list" => utils::list_tasks(&all_tasks),
-            "close" => println!("TODO: Close task"),
+            "close" => {
+                let task_id = input
+                    .strip_prefix(instr).unwrap_or("")
+                    .trim_start().trim().parse::<i32>().unwrap();
+                all_tasks = utils::close_task(all_tasks, task_id).unwrap();
+            },
             "remove" => println!("TODO: Remove task"),
             "quit" => break,
             "" => (),
@@ -35,15 +40,4 @@ fn main() {
     }
 
     utils::export(all_tasks, "example.json");
-    
-    /*
-    all_tasks = utils::add_task(all_tasks, "Sample task");
-
-    let temp = utils::get_status(&all_tasks);
-    println!("{:?}", temp);
-
-    utils::list_tasks(&all_tasks);
-
-    utils::export(all_tasks, "example.json");
-     */
 }
