@@ -1,23 +1,34 @@
+use chrono::prelude::{DateTime, Local};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use std::fmt;
-use std::io::BufReader;
-use std::path::Path;
-use std::fs;
-use std::io::{Error, ErrorKind};
+use std::{
+    fs,
+    fmt,
+    io::{Error, ErrorKind, BufReader},
+    path::Path,
+};
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Clone)]
 pub enum Status {
+    /// Closed tasks
     Done,
+    /// Ongoing tasks
     Todo,
+    /// Tasks past deadline
     Overdue
 }
 
+/// Represents a single task
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Entry {
+    /// The task's unique identifier
     id: i32,
+    /// Task name
     task: String,
-    status: Status
+    /// Task name, Status enum (Done, Overdue, TODO)
+    status: Status,
+    /// Timestamp of creation
+    timestamp: DateTime<Local>
 }
 
 impl fmt::Debug for Entry {
@@ -31,22 +42,98 @@ impl fmt::Debug for Entry {
     }
 }
 
+impl Entry {
+    pub fn new(id: i32, name: String) -> Self {
+        Self {
+            id: id,
+            task: name,
+            status: Status::Todo,
+            timestamp: Local::now()
+        }
+    }
+
+    /// Check if task is past deadline based on current time
+    pub fn is_overdue() {
+        unimplemented!()
+    }
+
+    /// Get number of days since the task has been created
+    pub fn delta() {
+        unimplemented!()
+    }
+}
+
+/// Task list
 #[derive(Serialize, Deserialize)]
 pub struct List {
+    /// Vector containing all tasks
     pub entries: Vec<Entry>,
-    pub id_tracker: i32
+    /// Current id cursor
+    id_tracker: i32
 }
 
 impl List {
+    /// Constructor
+    pub fn new() -> Self {
+        Self { entries: Vec::new(), id_tracker: 0 }
+    }
+
+    /// Return total tasks
     pub fn get_size(&self) -> usize {
         self.entries.len()
     }
 
+    /// Return all tasks
     pub fn get_all(&self) -> &Vec<Entry> {
         &self.entries
     }
+
+    pub fn get_cursor(&self) -> i32 {
+        self.id_tracker
+    }
+
+    pub fn inc_cursor(&mut self) {
+        self.id_tracker += 1;
+    }
+
+    pub fn add_task(&mut self, task: &str){
+        if task == "" { 
+            println!("Cannot add empty task name");
+        }
+    
+        let new_task = Entry::new(self.get_cursor(), task.to_string());
+        self.entries.push(new_task);
+        self.inc_cursor();
+    }
+
+    pub fn close_task(&mut self, id: i32) -> Result<(), Error> {
+        for i in 0..self.get_size() {
+            if self.entries[i].id == id && self.entries[i].status != Status::Done{
+                self.entries[i].status = Status::Done;
+                return Ok(())
+            }
+        }
+        Err(Error::new(ErrorKind::InvalidInput, format!("Open task with id {} not found", id)))
+    }
+
+    /// Obtain count of tasks by status
+    pub fn get_status(&self) -> HashMap<Status, u8> {
+        let mut counts = HashMap::from([
+            (Status::Todo, 0),
+            (Status::Done, 0),
+            (Status::Overdue, 0)
+        ]);
+
+        for el in self.get_all().iter() {
+            let val = counts.get(&el.status).unwrap();
+            counts.insert(el.status.clone(), val + 1);
+        }
+
+        counts
+    }
 }
 
+/// Open JSON file
 pub fn open_file(fpath: &str) -> List {
     let content = fs::File::open(fpath).unwrap();
     let reader = BufReader::new(content);
@@ -55,59 +142,21 @@ pub fn open_file(fpath: &str) -> List {
     res
 }
 
+/// Reads JSON file or creates a new task list if there is no file
 pub fn read_or_create(fpath: &str) -> List{
     if Path::new(fpath).exists() {
         open_file(fpath)
     }
     else {
-        List{entries: Vec::new(), id_tracker: 0}
+        List::new()
     }
 }
 
+/// Save task list to JSON file
 pub fn export(list: List, fpath: &str) {
     let f = serde_json::to_string(&list).unwrap();
 
     fs::write(fpath, f).expect("Error writing file");
-}
-
-pub fn get_status(list: &List) -> HashMap<Status, u8> {
-    let mut counts = HashMap::from([
-        (Status::Todo, 0),
-        (Status::Done, 0),
-        (Status::Overdue, 0)
-    ]);
-
-    for el in list.entries.iter() {
-        let val = counts.get(&el.status).unwrap();
-        counts.insert(el.status.clone(), val + 1);
-    }
-
-    counts
-}
-
-pub fn add_task(mut list: List, task: &str) -> List{
-    if task == "" { 
-        println!("Cannot add empty task name");
-        return list
-    }
-
-    let new_task = Entry{
-        id: list.id_tracker,
-        task: task.to_string(), status: Status::Todo
-    };
-    list.entries.push(new_task);
-    list.id_tracker += 1;
-    list
-}
-
-pub fn update_task(mut list: List, id: i32) -> Result<List, Error> {
-    for i in 0..list.entries.len() {
-        if list.entries[i].id == id { 
-            list.entries[i].status = Status::Done;
-            return Ok(list)
-        }
-    }
-    Err(Error::new(ErrorKind::InvalidInput, "Task not found"))
 }
 
 pub fn list_tasks(list: &List) {
@@ -142,16 +191,6 @@ pub fn list_tasks(list: &List) {
     }
 }
 
-pub fn close_task(mut list: List, id: i32) -> Result<List, Error> {
-    for i in 0..list.entries.len() {
-        if list.entries[i].id == id && list.entries[i].status != Status::Done {
-            list.entries[i].status = Status::Done;
-            return Ok(list)
-        }
-    }
-    Err(Error::new(ErrorKind::InvalidInput, "Open task with provided id not found"))
-}
-
 pub fn show_help() {
     let help_string = "
     Usage:
@@ -173,14 +212,31 @@ pub fn show_help() {
     println!("{}", help_string);
 }
 
-#[test]
-fn test_update_task() {
-    let mut list = List{entries: Vec::new(), id_tracker: 0};
-    list = add_task(list, "Sample task");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::List;
 
-    let to_close: i32 = 0;
+    #[test]
+    fn list_size() {
+        let mut list = List::new();
+        let total_tasks = 100;
+        for i in 0..total_tasks {
+            let curr_task_name = format!("Sample task {}", i);
+            list.add_task(&curr_task_name);
+        }
+        assert_eq!(list.get_size(), total_tasks);
+    }
 
-    assert_eq!(&list.entries[to_close], Status::Todo);
-    list = update_task(list, to_close).unwrap();
-    assert_eq!(list.entries[to_close], Status::Done);
+    #[test]
+    fn new_task() {
+        let mut list = List::new();
+        list.add_task("Sample task");
+
+        let to_close: i32 = 0;
+
+        assert_eq!(list.entries[to_close as usize].status, Status::Todo);
+        list.close_task(to_close).unwrap();
+        assert_eq!(list.entries[to_close as usize].status, Status::Done);
+    }
 }
