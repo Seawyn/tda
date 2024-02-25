@@ -3,11 +3,11 @@ use todo::utils::*;
 fn get_stub() -> List {
     let mut to_return = List::new();
 
-    to_return.add_task("Done entry");
-    to_return.add_task("Done entry 2");
+    to_return.add_task("Done entry", None);
+    to_return.add_task("Done entry 2", None);
 
-    to_return.add_task("Sample entry");
-    to_return.add_task("Sample entry 2");
+    to_return.add_task("Sample entry", None);
+    to_return.add_task("Sample entry 2", None);
 
     to_return
 }

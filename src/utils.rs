@@ -1,4 +1,7 @@
-use chrono::prelude::{DateTime, Local};
+use chrono::{
+    prelude::{NaiveDateTime, Local},
+    TimeZone,
+};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::{
@@ -28,7 +31,8 @@ pub struct Entry {
     /// Task name, Status enum (Done, Overdue, TODO)
     status: Status,
     /// Timestamp of creation
-    timestamp: DateTime<Local>
+    timestamp: NaiveDateTime,
+    deadline: Option<NaiveDateTime>
 }
 
 impl fmt::Debug for Entry {
@@ -43,18 +47,23 @@ impl fmt::Debug for Entry {
 }
 
 impl Entry {
-    pub fn new(id: i32, name: String) -> Self {
+    pub fn new(id: i32, name: String, deadline: Option<NaiveDateTime>) -> Self {
         Self {
             id: id,
             task: name,
             status: Status::Todo,
-            timestamp: Local::now()
+            timestamp: Local::now().naive_local(),
+            deadline: deadline
         }
     }
 
     /// Check if task is past deadline based on current time
-    pub fn is_overdue() {
-        unimplemented!()
+    pub fn is_overdue(&self) -> bool {
+        let curr_time = Local::now().naive_local();
+        match self.deadline {
+            Some(d) => d < curr_time,
+            _ => false
+        }
     }
 
     /// Get number of days since the task has been created
@@ -96,12 +105,12 @@ impl List {
         self.id_tracker += 1;
     }
 
-    pub fn add_task(&mut self, task: &str){
+    pub fn add_task(&mut self, task: &str, deadline: Option<NaiveDateTime>){
         if task == "" { 
             println!("Cannot add empty task name");
         }
     
-        let new_task = Entry::new(self.get_cursor(), task.to_string());
+        let new_task = Entry::new(self.get_cursor(), task.to_string(), deadline);
         self.entries.push(new_task);
         self.inc_cursor();
     }
@@ -131,6 +140,14 @@ impl List {
 
         counts
     }
+
+    pub fn check_overdues(&mut self) {
+        for i in 0..self.get_size() {
+            if self.entries[i].is_overdue() {
+                self.entries[i].status = Status::Overdue;
+            }
+        }
+    }
 }
 
 /// Open JSON file
@@ -157,6 +174,33 @@ pub fn export(list: List, fpath: &str) {
     let f = serde_json::to_string(&list).unwrap();
 
     fs::write(fpath, f).expect("Error writing file");
+}
+
+pub fn parse_deadline(mut deadline_raw: String) -> Option<NaiveDateTime> {
+    if deadline_raw.ends_with("\n") {
+        deadline_raw.pop();
+    }
+
+    let parts = deadline_raw.split("-").collect::<Vec<&str>>();
+
+    if parts.len() != 3 {
+        return None
+    }
+
+    let year = parts[0].to_string().parse::<i32>().ok();
+    let month = parts[1].to_string().parse::<u32>().ok();
+    let day = parts[2].to_string().parse::<u32>().ok();
+
+    let new_local;
+    match (year, month, day) {
+        (Some(year), Some(month), Some(day)) => new_local = Local.with_ymd_and_hms(year, month, day, 0, 0, 0),
+        _ => return None
+    };
+
+    match new_local.single() {
+        Some(t) => Some(t.naive_local()),
+        _ => None
+    }
 }
 
 pub fn list_tasks(list: &List) {
@@ -214,6 +258,10 @@ pub fn show_help() {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use chrono::Datelike;
+
     use super::*;
     use crate::utils::List;
 
@@ -223,7 +271,7 @@ mod tests {
         let total_tasks = 100;
         for i in 0..total_tasks {
             let curr_task_name = format!("Sample task {}", i);
-            list.add_task(&curr_task_name);
+            list.add_task(&curr_task_name, None);
         }
         assert_eq!(list.get_size(), total_tasks);
     }
@@ -231,12 +279,63 @@ mod tests {
     #[test]
     fn new_task() {
         let mut list = List::new();
-        list.add_task("Sample task");
+        list.add_task("Sample task", None);
 
         let to_close: i32 = 0;
 
         assert_eq!(list.entries[to_close as usize].status, Status::Todo);
         list.close_task(to_close).unwrap();
         assert_eq!(list.entries[to_close as usize].status, Status::Done);
+    }
+
+    #[test]
+    fn parse_pass() {
+        let line = String::from("2024-01-01\n");
+        let res = parse_deadline(line).unwrap();
+        let exp = Local.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap().naive_local();
+
+        assert_eq!(res, exp);
+    }
+
+    #[test]
+    fn parse_fail_not_date() {
+        let line_error = String::from("2024-01-011232");
+        let res = parse_deadline(line_error);
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn parse_fail_empty() {
+        let line_error = String::from("");
+        let res = parse_deadline(line_error);
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn overdue_true() {
+        let deadline = parse_deadline(String::from("2000-01-01"));
+        let entry = Entry::new(0, String::from("test entry"), deadline);
+
+        assert!(entry.is_overdue());
+    }
+
+    #[test]
+    fn overdue_missing() {
+        // Empty deadline, results in null
+        let deadline = parse_deadline(String::from(""));
+        let entry = Entry::new(0, String::from("test entry"), deadline);
+
+        assert!(!entry.is_overdue());
+    }
+
+    #[test]
+    fn not_overdue() {
+        // One day from now
+        let curr_time = Local::now().naive_local() + Duration::from_secs(60*60*24);
+        let deadline_str = format!("{}-{}-{}", curr_time.year(), curr_time.month(), curr_time.day());
+        let deadline = parse_deadline(String::from(deadline_str));
+        let entry = Entry::new(0, String::from("test entry"), deadline);
+
+        assert!(!entry.is_overdue());
     }
 }

@@ -4,9 +4,7 @@ use std::io;
 const FILENAME: &str = "tasks.json";
 
 fn main() {
-    
     let mut all_tasks = utils::read_or_create(FILENAME);
-
     let mut input = String::new();
 
     loop {
@@ -23,10 +21,19 @@ fn main() {
                     .strip_prefix(instr).unwrap_or("")
                     .trim_start();
             
-                all_tasks.add_task(task_name);
+                println!("Add deadline? (format: YYYY-MM-DD)");
+                let mut deadline_resp = String::new();
+                io::stdin().read_line(&mut deadline_resp).expect("Error reading input");
+                
+                let deadline = utils::parse_deadline(deadline_resp);
+
+                all_tasks.add_task(task_name, deadline);
             },
             "help" => utils::show_help(),
-            "list" => utils::list_tasks(&all_tasks),
+            "list" => {
+                all_tasks.check_overdues();
+                utils::list_tasks(&all_tasks)
+            },
             "close" => {
                 let task_id = input
                     .strip_prefix(instr).unwrap_or("")
