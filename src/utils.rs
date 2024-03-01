@@ -49,11 +49,11 @@ impl fmt::Debug for Entry {
 impl Entry {
     pub fn new(id: i32, name: String, deadline: Option<NaiveDateTime>) -> Self {
         Self {
-            id: id,
+            id,
             task: name,
             status: Status::Todo,
             timestamp: Local::now().naive_local(),
-            deadline: deadline
+            deadline
         }
     }
 
@@ -81,6 +81,12 @@ pub struct List {
     id_tracker: i32
 }
 
+impl Default for List {
+    fn default() -> Self {
+        List::new()
+    }
+}
+
 impl List {
     /// Constructor
     pub fn new() -> Self {
@@ -106,7 +112,7 @@ impl List {
     }
 
     pub fn add_task(&mut self, task: &str, deadline: Option<NaiveDateTime>){
-        if task == "" { 
+        if task.is_empty() { 
             println!("Cannot add empty task name");
         }
     
@@ -155,8 +161,7 @@ pub fn open_file(fpath: &str) -> List {
     let content = fs::File::open(fpath).unwrap();
     let reader = BufReader::new(content);
 
-    let res = serde_json::from_reader(reader).unwrap();
-    res
+    serde_json::from_reader(reader).unwrap()
 }
 
 /// Reads JSON file or creates a new task list if there is no file
@@ -177,11 +182,11 @@ pub fn export(list: List, fpath: &str) {
 }
 
 pub fn parse_deadline(mut deadline_raw: String) -> Option<NaiveDateTime> {
-    if deadline_raw.ends_with("\n") {
+    if deadline_raw.ends_with('\n') {
         deadline_raw.pop();
     }
 
-    let parts = deadline_raw.split("-").collect::<Vec<&str>>();
+    let parts = deadline_raw.split('-').collect::<Vec<&str>>();
 
     if parts.len() != 3 {
         return None
@@ -191,16 +196,12 @@ pub fn parse_deadline(mut deadline_raw: String) -> Option<NaiveDateTime> {
     let month = parts[1].to_string().parse::<u32>().ok();
     let day = parts[2].to_string().parse::<u32>().ok();
 
-    let new_local;
-    match (year, month, day) {
-        (Some(year), Some(month), Some(day)) => new_local = Local.with_ymd_and_hms(year, month, day, 0, 0, 0),
+    let new_local = match (year, month, day) {
+        (Some(year), Some(month), Some(day)) => Local.with_ymd_and_hms(year, month, day, 0, 0, 0),
         _ => return None
     };
 
-    match new_local.single() {
-        Some(t) => Some(t.naive_local()),
-        _ => None
-    }
+    new_local.single().map(|t| t.naive_local())
 }
 
 pub fn list_tasks(list: &List) {
@@ -216,21 +217,21 @@ pub fn list_tasks(list: &List) {
         }
     }
 
-    if overdues.len() == 0 {
+    if overdues.is_empty() {
         println!("You have no overdue tasks");
     }
     else {
         for el in overdues { print!("{:?}", el) }
     }
 
-    if todos.len() == 0 {
+    if todos.is_empty() {
         println!("You have no tasks")
     }
     else {
         for el in todos { print!("{:?}", el) }
     }
 
-    if dones.len() > 0 { 
+    if !dones.is_empty() { 
         for el in dones {print!("{:?}", el) }
     }
 }
